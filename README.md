@@ -22,7 +22,6 @@ SSH_Interface_v2.clz              compiled Simpl# library (required)
 SSH Interface/                    Simpl# source (Visual Studio 2022)
 test-server/                      Python mock (see that folder’s README)
 SSH Testing.smw                   sample SIMPL Windows program (optional)
-_archive/                         original v1.7 processor (reference only)
 ```
 
 ---

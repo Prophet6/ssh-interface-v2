@@ -21,6 +21,7 @@ test-server/host_key.pub
 
 # Internal session notes (not for public)
 _notes.txt
+_archive/
 
 # SIMPL Windows compile / load artifacts
 *.lpz
