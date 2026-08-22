@@ -27,6 +27,7 @@ _notes.txt
 *.lpz.hash
 *.sig
 *.dip
+*.sm2
 *.smft
 *_compiled.zip
 *_archive.zip
