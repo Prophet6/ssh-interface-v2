@@ -1,0 +1,381 @@
+#HELP_BEGIN
+SSH Interface Client v2.0
+
+Simpl# SSH client for 3-Series / 4-Series / VC-4. Drop-in replacement for
+the v1.7 processor with reconnect, host-key handling, and IP override
+moved into the Simpl# library.
+
+Use this module as a stand-alone SSH client. For inbound TCP on the
+processor, use the built-in SIMPL Windows TCP/IP Server symbol.
+
+--------------------------------------------------------------------------------
+OPERATION
+--------------------------------------------------------------------------------
+Hold Connect high to connect. Release Connect to disconnect.
+Automatic retry after the remote SSH server is killed is not reliable yet
+(toggle Connect to recover).
+
+To_Server is sent as-is (no extra CR/LF). Size command strings in the
+program; From_Server is chunked at 250 characters.
+
+IP_Address_Override, IP_Port_Override, Username_Override, and
+Password_Override$ replace the matching parameter when they have a
+value (port override must be greater than 0). Empty / 0 reverts to the
+parameter. A change while Connect is held high reconnects.
+
+Host key:
+- Accept_Any_Key = Yes stores/trusts the first key automatically.
+- Accept_Any_Key = No raises Accept_New_Key_Notice and New_Key_Text$
+  when the fingerprint is unknown or has changed. Pulse Accept_New_Key
+  to store it and reconnect, or Decline_New_Key to abort.
+- Host keys are stored per symbol instance name:
+  \NVRAM\SSH_Interface_v2_<GetSymbolInstanceName()>.key
+- Accept_Any_Key_Override high forces Accept_Any_Key = Yes for this
+  instance; low uses the Accept_Any_Key parameter.
+
+Connection_Status_Out:
+  1 Trying To Connect
+  2 Connected
+  3 Not Connected
+  4 Non-Matching Fingerprint
+
+Do not bind IP_Port to 22 if this processor's own console SSH is in use
+on the same port of a remote device - 22 is correct for a normal SSH
+server (Cisco codec, Linux, etc.).
+
+--------------------------------------------------------------------------------
+VERSION HISTORY
+--------------------------------------------------------------------------------
+v2.0  8/21/2026  RGW
+  - New Simpl# core (SSH_Interface_v2.clz)
+  - Reconnect, host-key store, and TX gather live in Simpl#
+  - Password + keyboard-interactive authentication
+  - IP override, unique ID, debug
+  - Inbound TCP: use SIMPL Windows TCP/IP Server (not this library)
+  - Debug is a digital input (hold high for console trace)
+  - Accept_Any_Key_Override digital; Unique_ID parameter removed
+    (host-key file uses GetSymbolInstanceName())
+#HELP_END
+
+/* COMPILER DIRECTIVES */
+
+#SYMBOL_NAME "SSH Interface Client v2.0"
+#CATEGORY "12,57" // System Control, Remote Systems
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#USER_SIMPLSHARP_LIBRARY "SSH_Interface_v2"
+//#ENABLE_TRACE
+
+/* INPUTS & OUTPUTS */
+
+DIGITAL_INPUT	_SKIP_, _SKIP_, _SKIP_, _SKIP_,
+				_SKIP_,	Connect,
+				_SKIP_, Accept_New_Key, Decline_New_Key, Accept_Any_Key_Override,
+				_SKIP_, Retry, Debug;
+STRING_INPUT	_SKIP_, IP_Address_Override[64];
+ANALOG_INPUT	IP_Port_Override;
+STRING_INPUT	Username_Override[64], Password_Override$[64];
+BUFFER_INPUT	_SKIP_, To_Server[1000];
+
+DIGITAL_OUTPUT	_SKIP_, _SKIP_, _SKIP_, _SKIP_,
+				_SKIP_, Is_Connected,
+				_SKIP_, Accept_New_Key_Notice, _SKIP_, _SKIP_;
+STRING_OUTPUT	_SKIP_, _SKIP_, _SKIP_, _SKIP_, New_Key_Text; 
+ANALOG_OUTPUT	Connection_Status_Out;
+STRING_OUTPUT	Connection_Status_Text,
+				_SKIP_, _SKIP_, From_Server;
+
+STRING_PARAMETER	IP_Address[64];
+INTEGER_PARAMETER	IP_Port;
+STRING_PARAMETER	Username[64];
+STRING_PARAMETER	Password[64];
+INTEGER_PARAMETER	Accept_Any_Key;
+
+/* PROPERTIES */
+
+#BEGIN_PARAMETER_PROPERTIES IP_Address
+	propValidUnits =		unitString;
+	propDefaultUnit =		unitString;
+	propDefaultValue =		"0.0.0.0";
+	propShortDescription =	"SSH server IP or hostname";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES IP_Port
+	propValidUnits =		unitDecimal;
+	propDefaultUnit =		unitDecimal;
+	propDefaultValue =		22d;
+	propShortDescription =	"SSH port (default 22)";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES Username
+	propValidUnits =		unitString;
+	propDefaultUnit =		unitString;
+	propShortDescription =	"SSH username";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES Password
+	propValidUnits =		unitString;
+	propDefaultUnit =		unitString;
+	propShortDescription =	"SSH password";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES Accept_Any_Key
+	propValidUnits =		unitDecimal;
+	propDefaultUnit =		unitDecimal;
+	propDefaultValue =		0d;
+	propList =				{0d, "No"},
+							{1d, "Yes"};
+	propShortDescription =	"Trust unknown host keys without prompting";
+#END_PARAMETER_PROPERTIES
+
+/* GLOBAL VARIABLES */
+
+STRING			IPAddress$[64], User$[64], Pass$[64];
+INTEGER			Port, iConnectRequest, Connection_Status;
+SshInterface	Core;
+
+/* FUNCTIONS */
+
+FUNCTION ApplyOverrides()
+{
+	If (Len(IP_Address_Override) > 0)
+	{
+		IPAddress$ = IP_Address_Override;
+	}
+	Else
+	{
+		IPAddress$ = IP_Address;
+	}
+
+	If (IP_Port_Override > 0)
+	{
+		Port = IP_Port_Override;
+	}
+	Else
+	{
+		Port = IP_Port;
+	}
+
+	If (Len(Username_Override) > 0)
+	{
+		User$ = Username_Override;
+	}
+	Else
+	{
+		User$ = Username;
+	}
+
+	If (Len(Password_Override$) > 0)
+	{
+		Pass$ = Password_Override$;
+	}
+	Else
+	{
+		Pass$ = Password;
+	}
+
+	If (Accept_Any_Key_Override = 1)
+	{
+		Core.Accept_Any_Key(1);
+	}
+	Else
+	{
+		Core.Accept_Any_Key(Accept_Any_Key);
+	}
+}
+
+FUNCTION DoConnect()
+{
+	ApplyOverrides();
+	Core.Connect(IPAddress$, Port, User$, Pass$);
+}
+
+/* CALLBACKS */
+
+CALLBACK FUNCTION ProcessFromDevice(STRING data)
+{
+	From_Server = data;
+}
+
+CALLBACK FUNCTION ProcessFingerprint(STRING fingerprint)
+{
+	New_Key_Text = fingerprint;
+	Accept_New_Key_Notice = 1;
+}
+
+CALLBACK FUNCTION ProcessConnectionStatus(INTEGER status, STRING text)
+{
+	processlogic();
+	Connection_Status = status;
+	Connection_Status_Out = status;
+	Connection_Status_Text = text;
+
+	If (status = 2)
+	{
+		Is_Connected = 1;
+		Accept_New_Key_Notice = 0;
+	}
+	Else
+	{
+		Is_Connected = 0;
+	}
+
+	If (status = 4)
+	{
+		Accept_New_Key_Notice = 1;
+		iConnectRequest = 0;
+	}
+}
+
+Callback GatherEventHandler HandleTxChange(GatherEventArgs args)
+{
+	String Temp$[1000];
+	Signed_Integer RearmSuccess;
+	Signed_Integer RecreateSuccess;
+	Integer RearmTries;
+
+	If (args.Results = 0)
+	{
+		Temp$ = args.RxString;
+		If (Len(To_Server) > 0)
+		{
+			Temp$ = Temp$ + RemoveByLength(Len(To_Server), To_Server);
+		}
+		Core.Command_In(Temp$);
+	}
+
+	RearmTries = 0;
+	Do
+	{
+		RearmSuccess = RearmGatherAsync(args.Input);
+		RearmTries = RearmTries + 1;
+	}
+	Until ((RearmSuccess >= 0) || (RearmTries >= 10));
+
+	If (RearmTries >= 10)
+	{
+		GenerateUserError("(%s) Failed to RearmGatherAsync, creating a new GatherAsync", GetSymbolInstanceName());
+		RecreateSuccess = GatherAsyncByLength(1, To_Server, HandleTxChange);
+		GenerateUserError("(%s) Creating new GatherAsync, result = %d", GetSymbolInstanceName(), RecreateSuccess);
+	}
+}
+
+/* EVENTS */
+
+PUSH Connect
+{
+	iConnectRequest = 1;
+	Is_Connected = 0;
+	Connection_Status = 1;
+	Connection_Status_Out = 1;
+	Connection_Status_Text = "Trying To Connect";
+	Accept_New_Key_Notice = 0;
+	DoConnect();
+}
+
+RELEASE Connect
+{
+	iConnectRequest = 0;
+	Accept_New_Key_Notice = 0;
+	Is_Connected = 0;
+	Connection_Status = 3;
+	Connection_Status_Out = 3;
+	Connection_Status_Text = "Not Connected";
+	Core.Disconnect();
+}
+
+PUSH Accept_New_Key
+{
+	iConnectRequest = 1;
+	Accept_New_Key_Notice = 0;
+	Connection_Status = 1;
+	Connection_Status_Out = 1;
+	Connection_Status_Text = "Trying To Connect";
+	Core.Accept_New_Key();
+	DoConnect();
+}
+
+PUSH Decline_New_Key
+{
+	iConnectRequest = 0;
+	Accept_New_Key_Notice = 0;
+	Core.Decline_New_Key();
+}
+
+PUSH Retry
+{
+	If (iConnectRequest = 1)
+	{
+		Connection_Status = 1;
+		Connection_Status_Out = 1;
+		Connection_Status_Text = "Trying To Connect";
+		DoConnect();
+	}
+}
+
+CHANGE Debug
+{
+	Core.Debug(Debug);
+}
+
+CHANGE Accept_Any_Key_Override
+{
+	ApplyOverrides();
+}
+
+CHANGE IP_Address_Override
+{
+	If (iConnectRequest = 1)
+	{
+		DoConnect();
+	}
+}
+
+CHANGE IP_Port_Override
+{
+	If (iConnectRequest = 1)
+	{
+		DoConnect();
+	}
+}
+
+CHANGE Username_Override
+{
+	If (iConnectRequest = 1)
+	{
+		DoConnect();
+	}
+}
+
+CHANGE Password_Override$
+{
+	If (iConnectRequest = 1)
+	{
+		DoConnect();
+	}
+}
+
+/* MAIN */
+
+FUNCTION Main()
+{
+	WaitForInitializationComplete();
+
+	iConnectRequest = 0;
+	Connection_Status = 3;
+	Connection_Status_Out = 3;
+	Connection_Status_Text = "Not Connected";
+	Is_Connected = 0;
+	Accept_New_Key_Notice = 0;
+
+	RegisterDelegate(Core, SendFromDevice, ProcessFromDevice);
+	RegisterDelegate(Core, SendConnectionStatus, ProcessConnectionStatus);
+	RegisterDelegate(Core, SendFingerprint, ProcessFingerprint);
+
+	Core.Debug(Debug);
+	Core.Unique_ID(GetSymbolInstanceName());
+	ApplyOverrides();
+	Core.LoadSettings();
+
+	GatherAsyncByLength(1, To_Server, HandleTxChange);
+}
