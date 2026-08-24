@@ -8,7 +8,7 @@ Crestron SIMPL+ / Simpl# **SSH client** for **4-Series** processors (RMC4, CP4, 
 
 Crestron Simpl# exposes `SshClient` only. For inbound TCP on the processor, use the built-in SIMPL Windows **TCP/IP Server** symbol (not this library).
 
-A PC-side mock in [`test-server/`](test-server/) can stand in as an SSH server for bench tests.
+A PC-side mock lives in a separate repo: [ssh-tcp-mock](https://github.com/Prophet6/ssh-tcp-mock) (SSH server and raw TCP client for bench tests).
 
 This project is not affiliated with Crestron Electronics.
 
@@ -20,8 +20,9 @@ This project is not affiliated with Crestron Electronics.
 SSH Interface Client v2.0.usp / .ush
 SSH_Interface_v2.clz              compiled Simpl# library (required)
 SSH Interface/                    Simpl# source (Visual Studio 2022)
-test-server/                      Python mock (see that folder’s README)
 SSH Testing.smw                   sample SIMPL Windows program (optional)
+
+PC mock (SSH server / TCP client): https://github.com/Prophet6/ssh-tcp-mock
 ```
 
 ---
@@ -69,11 +70,12 @@ Rebuilding the `.clz` also needs Visual Studio 2022 and NuGet package `Crestron.
 
 ## Run the PC mock tester
 
-Full walkthrough: [`test-server/README.md`](test-server/README.md).
+Full walkthrough: [ssh-tcp-mock](https://github.com/Prophet6/ssh-tcp-mock).
 
-1. Install Python 3.9+ with **Add to PATH**.
-2. Double-click `test-server\install-dependencies.bat` (once).
-3. Allow inbound **TCP 2222** on the PC firewall if the processor cannot connect.
+1. Clone or download [ssh-tcp-mock](https://github.com/Prophet6/ssh-tcp-mock).
+2. Install Python 3.9+ with **Add to PATH**.
+3. Double-click `install-dependencies.bat` (once).
+4. Allow inbound **TCP 2222** on the PC firewall if the processor cannot connect.
 
 ### Test the Crestron **Client** (processor → this PC)
 
@@ -81,7 +83,7 @@ Full walkthrough: [`test-server/README.md`](test-server/README.md).
 PC (start-ssh-server.bat, port 2222)  <--- SSH ---  Crestron Client module
 ```
 
-1. Double-click `test-server\start-ssh-server.bat`.
+1. Double-click `start-ssh-server.bat` in the ssh-tcp-mock folder.
 2. Note the **LAN IP** it prints (not `127.0.0.1`).
 3. On the Client symbol:
 
@@ -99,7 +101,7 @@ If the mock is stopped, toggle **Connect** low then high to connect again (auto-
 
 ### Inbound TCP on the processor
 
-Use SIMPL Windows **TCP/IP Server**. Point `test-server\start-tcp-client.bat` at the processor IP and that symbol’s port (often `5000`).
+Use SIMPL Windows **TCP/IP Server**. Point `start-tcp-client.bat` in ssh-tcp-mock at the processor IP and that symbol’s port (often `5000`).
 
 ---
 

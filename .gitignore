@@ -13,12 +13,6 @@ SPlsWork/
 *.smw.bak
 *.usp.ASV
 
-# Python mock
-test-server/__pycache__/
-test-server/*.pyc
-test-server/host_key
-test-server/host_key.pub
-
 # Internal session notes (not for public)
 _notes.txt
 _archive/
